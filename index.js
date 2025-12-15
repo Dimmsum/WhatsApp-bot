@@ -40,31 +40,22 @@ app.get("/webhook", (req, res) => {
  */
 app.post("/webhook", async (req, res) => {
   try {
-    const entry = req.body.entry?.[0];
-    const change = entry?.changes?.[0];
+    const change = req.body.entry?.[0]?.changes?.[0];
     const value = change?.value;
-    const message = value?.messages?.[0];
 
-    // If no message, acknowledge webhook
-    if (!message) {
+    if (!value?.messages) {
       return res.sendStatus(200);
     }
 
-    const from = message.from; // User phone number
-    const messageType = message.type;
+    const message = value.messages[0];
 
-    // Only respond to text messages
-    if (messageType !== "text") {
-      console.log("ℹ️ Non-text message received");
-      return res.sendStatus(200);
-    }
+    const from = message.from;
+    const text = message.text?.body;
+    const messageId = message.id;
 
-    const text = message.text.body;
+    console.log("📩 Incoming:", text);
 
-    console.log(`📩 Message from ${from}:`, text);
-
-    // Reply to the same user
-    await sendMessage(from, `👋 Hey! You said: "${text}"`);
+    await sendMessage(from, messageId, `You said: "${text}"`);
 
     res.sendStatus(200);
   } catch (error) {
