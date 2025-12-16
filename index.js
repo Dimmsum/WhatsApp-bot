@@ -9,19 +9,7 @@ app.use(express.json());
 
 const { VERIFY_TOKEN, WHATSAPP_TOKEN, PHONE_NUMBER_ID, PORT } = process.env;
 
-console.log("🔧 ENV CHECK");
-console.log({
-  HAS_VERIFY_TOKEN: !!VERIFY_TOKEN,
-  HAS_WHATSAPP_TOKEN: !!WHATSAPP_TOKEN,
-  PHONE_NUMBER_ID,
-  PORT,
-});
-
-/**
- * ----------------------------------------------------
- * 1. Webhook Verification (Meta requirement)
- * ----------------------------------------------------
- */
+// Webhook verification endpoint
 app.get("/webhook", (req, res) => {
   console.log("🔍 Webhook verification request:", req.query);
 
@@ -31,18 +19,16 @@ app.get("/webhook", (req, res) => {
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("✅ Webhook verified successfully");
-    return res.status(200).send(challenge);
+    // Must return challenge as plain text
+    return res.status(200).type("text/plain").send(challenge);
   }
 
   console.log("❌ Webhook verification failed");
+  console.log(`Expected: ${VERIFY_TOKEN}, Got: ${token}`);
   res.sendStatus(403);
 });
 
-/**
- * ----------------------------------------------------
- * 2. Receive WhatsApp Messages
- * ----------------------------------------------------
- */
+// Webhook to receive messages
 app.post("/webhook", async (req, res) => {
   console.log("🔥 RAW WEBHOOK PAYLOAD");
   console.dir(req.body, { depth: null });
@@ -52,12 +38,11 @@ app.post("/webhook", async (req, res) => {
     const value = change?.value;
 
     if (!value?.messages) {
-      console.log("ℹ️ No messages in payload (status update)");
+      console.log("ℹ️ No messages in payload (status update or other event)");
       return res.sendStatus(200);
     }
 
     const message = value.messages[0];
-
     const from = message.from;
     const text = message.text?.body;
     const messageId = message.id;
@@ -65,30 +50,34 @@ app.post("/webhook", async (req, res) => {
     console.log("📩 Parsed message:");
     console.log({ from, text, messageId });
 
-    await sendMessage(from, messageId, `You said: "${text}"`);
+    // Only respond to "hello" messages
+    if (text && text.toLowerCase().trim() === "hello") {
+      console.log("✨ Responding to 'hello' message");
+      await sendMessage(from, messageId, "Hello! 👋 How can I help you today?");
+    } else {
+      console.log("ℹ️ Message ignored (not 'hello')");
+    }
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("❌ Webhook handler error");
-    console.error(error.response?.data || error.message);
+    console.error(
+      "❌ Webhook handler error:",
+      error.response?.data || error.message
+    );
     res.sendStatus(500);
   }
 });
 
-/**
- * ----------------------------------------------------
- * 3. Send Message Helper (FIXED + LOGGED)
- * ----------------------------------------------------
- */
-async function sendMessage(to, messageId, body) {
-  const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
+// Function to send a message
+async function sendMessage(to, replyToMessageId, body) {
+  const url = `https://graph.facebook.com/v24.0/${PHONE_NUMBER_ID}/messages`;
 
   const payload = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
     to,
     context: {
-      message_id: messageId,
+      message_id: replyToMessageId,
     },
     type: "text",
     text: {
@@ -97,7 +86,7 @@ async function sendMessage(to, messageId, body) {
     },
   };
 
-  console.log("📤 Sending payload to Meta:");
+  console.log("📤 Sending message to Meta:");
   console.dir(payload, { depth: null });
 
   try {
@@ -108,10 +97,10 @@ async function sendMessage(to, messageId, body) {
       },
     });
 
-    console.log("✅ Meta send success:");
+    console.log("✅ Message sent successfully:");
     console.dir(response.data, { depth: null });
   } catch (error) {
-    console.error("❌ Meta send FAILED");
+    console.error("❌ Failed to send message");
     console.error("Status:", error.response?.status);
     console.error("Data:", error.response?.data);
     throw error;
