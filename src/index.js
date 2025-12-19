@@ -37,23 +37,84 @@ client.on("ready", () => {
 });
 
 // Message received
-client.on("message", (message) => {
-  console.log(`\n📱 New Message:`);
-  console.log(`From: ${message.from}`);
-  console.log(`Author: ${message.author || "N/A"}`);
+client.on("message", async (message) => {
+  // Filter out status broadcasts
+  if (message.from === "status@broadcast") {
+    return; // Ignore status updates
+  }
+
+  // Determine if it's a group or individual chat
+  const isGroupMsg = message.from.endsWith("@g.us");
+  const isFromMe = message.fromMe;
+
+  let displayName = "Unknown";
+  let senderName = "Unknown";
+
+  try {
+    if (isGroupMsg) {
+      // For group messages, get both group name and sender name
+      const chat = await message.getChat();
+      displayName = chat.name || "Unknown Group";
+
+      // Get the sender's contact info
+      if (message.author) {
+        try {
+          const contact = await client.getContactById(message.author);
+          senderName =
+            contact.pushname || contact.name || contact.number || "Unknown";
+        } catch (err) {
+          // If we can't get contact, extract number from author
+          senderName = message.author.split("@")[0];
+        }
+      }
+    } else {
+      // For individual chats
+      const chat = await message.getChat();
+      displayName = chat.name || "Unknown";
+    }
+  } catch (error) {
+    // Fallback: extract phone number from chat ID
+    if (isGroupMsg) {
+      displayName = "Group Chat";
+    } else {
+      displayName = message.from.split("@")[0];
+    }
+  }
+
+  // Display message with contact/group name
+  if (isGroupMsg) {
+    console.log(`\n💬 Group Message:`);
+    console.log(`Group: ${displayName}`);
+    if (!isFromMe) {
+      console.log(`Sender: ${senderName}`);
+    } else {
+      console.log(`Sender: You`);
+    }
+  } else {
+    if (isFromMe) {
+      console.log(`\n📤 Message Sent by You:`);
+      console.log(`To: ${displayName}`);
+    } else {
+      console.log(`\n📱 Message Received:`);
+      console.log(`From: ${displayName}`);
+    }
+  }
+
   console.log(`Body: ${message.body}`);
   console.log(
     `Timestamp: ${new Date(message.timestamp * 1000).toLocaleString()}`
   );
   console.log(`---\n`);
 
-  // Example: Auto-reply to specific keywords
-  if (message.body.toLowerCase() === "hello") {
-    message.reply("Hello! I am a WhatsApp bot. How can I help you?");
-  }
+  // Example: Auto-reply to specific keywords (only for received messages)
+  if (!isFromMe) {
+    if (message.body.toLowerCase() === "hello") {
+      message.reply("Hello! I am a WhatsApp bot. How can I help you?");
+    }
 
-  if (message.body.toLowerCase() === "ping") {
-    message.reply("Pong! 🏓");
+    if (message.body.toLowerCase() === "ping") {
+      message.reply("Pong! 🏓");
+    }
   }
 });
 
