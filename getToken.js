@@ -1,3 +1,4 @@
+//Run this file in order to get your google refresh token and set it in the .env file
 const { google } = require("googleapis");
 const http = require("http");
 const url = require("url");
