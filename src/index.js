@@ -99,18 +99,23 @@ client.on("message", async (message) => {
     if (message.body.toLowerCase() === "/help") {
       const helpText =
         `🤖 *AI WhatsApp Assistant*\n\n` +
-        `I can help you with Google Drive operations!\n\n` +
-        `*Available commands:*\n` +
+        `I can help you with Google Drive and Linear!\n\n` +
+        `*Google Drive:*\n` +
         `• List files\n` +
         `• Search for files\n` +
         `• Create folders\n` +
         `• Get file info\n` +
         `• Share files\n` +
         `• Delete files\n\n` +
+        `*Linear:*\n` +
+        `• List teams and projects\n` +
+        `• Create issues\n` +
+        `• Read issues\n` +
+        `• Update issue status\n\n` +
         `*Special commands:*\n` +
         `/help - Show this message\n` +
         `/clear - Clear conversation history\n\n` +
-        `Just chat naturally, and I'll help you with Google Drive!`;
+        `Just chat naturally, and I'll help you with Google Drive and Linear!`;
       message.reply(helpText);
       return;
     }

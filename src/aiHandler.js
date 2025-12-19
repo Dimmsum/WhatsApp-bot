@@ -1,5 +1,6 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const googleDrive = require("./googleDrive");
+const linear = require("./linear");
 require("dotenv").config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -12,6 +13,13 @@ const availableFunctions = {
   delete_google_drive_file: googleDrive.deleteFile,
   get_file_metadata: googleDrive.getFileMetadata,
   share_google_drive_file: googleDrive.shareFile,
+  list_linear_teams: linear.listTeams,
+  list_linear_projects: linear.listProjects,
+  list_linear_issue_states: linear.listIssueStates,
+  search_linear_issues: linear.searchIssues,
+  get_linear_issue: linear.getIssue,
+  create_linear_issue: linear.createIssue,
+  update_linear_issue_status: linear.updateIssueStatus,
 };
 
 // Define the function declarations for Gemini
@@ -114,6 +122,131 @@ const functionDeclarations = [
       required: ["fileId", "email"],
     },
   },
+  {
+    name: "list_linear_teams",
+    description: "List teams in Linear.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "list_linear_projects",
+    description:
+      "List projects in Linear. Optionally filter by team name, key, or ID.",
+    parameters: {
+      type: "object",
+      properties: {
+        teamId: {
+          type: "string",
+          description: "Optional team name, key, or ID to filter projects",
+        },
+      },
+    },
+  },
+  {
+    name: "list_linear_issue_states",
+    description: "List issue states for a Linear team.",
+    parameters: {
+      type: "object",
+      properties: {
+        teamId: {
+          type: "string",
+          description: "Team name, key, or ID to list issue states for",
+        },
+      },
+      required: ["teamId"],
+    },
+  },
+  {
+    name: "search_linear_issues",
+    description: "Search for Linear issues using a text query.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search text or issue identifier (e.g. ENG-123)",
+        },
+        first: {
+          type: "number",
+          description: "Maximum number of issues to return (default: 10)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_linear_issue",
+    description: "Get a Linear issue by ID or identifier (e.g. ENG-123).",
+    parameters: {
+      type: "object",
+      properties: {
+        issueIdOrKey: {
+          type: "string",
+          description: "Issue UUID or identifier",
+        },
+      },
+      required: ["issueIdOrKey"],
+    },
+  },
+  {
+    name: "create_linear_issue",
+    description: "Create a new Linear issue.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Issue title",
+        },
+        description: {
+          type: "string",
+          description: "Issue description (optional)",
+        },
+        teamId: {
+          type: "string",
+          description: "Team name, key, or ID to create the issue in",
+        },
+        projectId: {
+          type: "string",
+          description: "Optional project ID",
+        },
+        stateId: {
+          type: "string",
+          description: "Optional issue state ID",
+        },
+        assigneeId: {
+          type: "string",
+          description: "Optional assignee ID",
+        },
+        labelIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional list of label IDs",
+        },
+      },
+      required: ["title", "teamId"],
+    },
+  },
+  {
+    name: "update_linear_issue_status",
+    description: "Update a Linear issue status by issue ID/key and state ID.",
+    parameters: {
+      type: "object",
+      properties: {
+        issueIdOrKey: {
+          type: "string",
+          description: "Issue UUID or identifier (e.g. ENG-123)",
+        },
+        stateId: {
+          type: "string",
+          description: "Target state ID",
+        },
+      },
+      required: ["issueIdOrKey", "stateId"],
+    },
+  },
 ];
 
 // Conversation history per user (in-memory, can be replaced with database)
@@ -131,8 +264,9 @@ async function processMessage(userId, userMessage) {
 
     const systemPrompt =
       process.env.AI_SYSTEM_PROMPT ||
-      "You are a helpful WhatsApp assistant that can interact with Google Drive. " +
+      "You are a helpful WhatsApp assistant that can interact with Google Drive and Linear. " +
         "When users ask about files, folders, or Google Drive operations, use the available functions. " +
+        "When users ask about issues, projects, or status updates in Linear, use the Linear functions. " +
         "Be conversational and helpful. Always confirm before deleting files.";
 
     // Initialize Gemini model with function calling
