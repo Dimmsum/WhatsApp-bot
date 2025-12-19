@@ -1,33 +1,66 @@
-# WhatsApp Bot with whatsapp-web-js
+# WhatsApp Bot with AI & Google Drive Integration
 
-A WhatsApp bot built with whatsapp-web-js and Puppeteer that connects to your WhatsApp account via phone number authentication.
+An intelligent WhatsApp bot built with whatsapp-web.js, Puppeteer, ChatGPT, and Google Drive API. The bot uses AI to understand natural language commands and perform Google Drive operations automatically.
 
 ## Features
 
 - ✅ QR code-based authentication
-- ✅ Real-time message listening
-- ✅ Message acknowledgment tracking
+- ✅ Real-time message listening with contact names
+- ✅ **AI-powered responses** using ChatGPT (GPT-4)
+- ✅ **Google Drive integration** with function calling
+- ✅ Natural language processing for Drive operations
+- ✅ Conversation history per user
+- ✅ Filter status broadcasts and group messages
 - ✅ Auto-reply capabilities
-- ✅ Retrieve messages by phone number
-- ✅ Get contact information
-- ✅ Send messages to specific numbers
 - 🔄 (Future) Message storage to database
+
+## AI Capabilities
+
+The bot can understand natural language and perform these Google Drive actions:
+
+- 📁 List files in Google Drive
+- 🔍 Search for specific files
+- 🆕 Create new folders
+- ℹ️ Get file metadata and details
+- 🔗 Share files with other users
+- 🗑️ Delete files (with confirmation)
 
 ## Prerequisites
 
 - Node.js 14+ installed
 - macOS, Linux, or Windows
 - Active WhatsApp account on your phone
+- OpenAI API key
+- Google Cloud project with Drive API enabled (see [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md))
 
 ## Installation
 
-1. Install dependencies:
+1. **Install dependencies:**
 
 ```bash
 npm install
 ```
 
-2. Run the bot:
+2. **Set up environment variables:**
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+OPENAI_API_KEY=sk-your-openai-api-key
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REFRESH_TOKEN=your-refresh-token
+```
+
+See [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md) for detailed setup instructions.
+
+3. **Run the bot:**
 
 ```bash
 npm start

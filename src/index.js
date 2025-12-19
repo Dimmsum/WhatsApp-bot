@@ -2,6 +2,11 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const fs = require("fs");
 const path = require("path");
+const aiHandler = require("./aiHandler");
+require("dotenv").config();
+
+// Bot start time - only process messages after this
+const botStartTime = Date.now();
 
 // Initialize the WhatsApp client
 const client = new Client({
@@ -43,61 +48,37 @@ client.on("message", async (message) => {
     return; // Ignore status updates
   }
 
-  // Determine if it's a group or individual chat
-  const isGroupMsg = message.from.endsWith("@g.us");
-  const isFromMe = message.fromMe;
-
-  let displayName = "Unknown";
-  let senderName = "Unknown";
-
-  try {
-    if (isGroupMsg) {
-      // For group messages, get both group name and sender name
-      const chat = await message.getChat();
-      displayName = chat.name || "Unknown Group";
-
-      // Get the sender's contact info
-      if (message.author) {
-        try {
-          const contact = await client.getContactById(message.author);
-          senderName =
-            contact.pushname || contact.name || contact.number || "Unknown";
-        } catch (err) {
-          // If we can't get contact, extract number from author
-          senderName = message.author.split("@")[0];
-        }
-      }
-    } else {
-      // For individual chats
-      const chat = await message.getChat();
-      displayName = chat.name || "Unknown";
-    }
-  } catch (error) {
-    // Fallback: extract phone number from chat ID
-    if (isGroupMsg) {
-      displayName = "Group Chat";
-    } else {
-      displayName = message.from.split("@")[0];
-    }
+  // Only process messages sent after bot started (ignore old/historical messages)
+  const messageTime = message.timestamp * 1000; // Convert to milliseconds
+  if (messageTime < botStartTime) {
+    return; // Ignore old messages
   }
 
-  // Display message with contact/group name
+  // Filter out group messages - only process personal chats
+  const isGroupMsg = message.from.endsWith("@g.us");
   if (isGroupMsg) {
-    console.log(`\n💬 Group Message:`);
-    console.log(`Group: ${displayName}`);
-    if (!isFromMe) {
-      console.log(`Sender: ${senderName}`);
-    } else {
-      console.log(`Sender: You`);
-    }
+    return; // Ignore group messages
+  }
+
+  const isFromMe = message.fromMe;
+  let displayName = "Unknown";
+
+  try {
+    // For individual chats
+    const chat = await message.getChat();
+    displayName = chat.name || "Unknown";
+  } catch (error) {
+    // Fallback: extract phone number from chat ID
+    displayName = message.from.split("@")[0];
+  }
+
+  // Display message with contact name
+  if (isFromMe) {
+    console.log(`\n📤 Message Sent by You:`);
+    console.log(`To: ${displayName}`);
   } else {
-    if (isFromMe) {
-      console.log(`\n📤 Message Sent by You:`);
-      console.log(`To: ${displayName}`);
-    } else {
-      console.log(`\n📱 Message Received:`);
-      console.log(`From: ${displayName}`);
-    }
+    console.log(`\n📱 Message Received:`);
+    console.log(`From: ${displayName}`);
   }
 
   console.log(`Body: ${message.body}`);
@@ -106,14 +87,51 @@ client.on("message", async (message) => {
   );
   console.log(`---\n`);
 
-  // Example: Auto-reply to specific keywords (only for received messages)
+  // Process messages with AI (only for received messages)
   if (!isFromMe) {
-    if (message.body.toLowerCase() === "hello") {
-      message.reply("Hello! I am a WhatsApp bot. How can I help you?");
+    // Special commands
+    if (message.body.toLowerCase() === "/clear") {
+      aiHandler.clearHistory(message.from);
+      message.reply("✅ Conversation history cleared!");
+      return;
     }
 
-    if (message.body.toLowerCase() === "ping") {
-      message.reply("Pong! 🏓");
+    if (message.body.toLowerCase() === "/help") {
+      const helpText =
+        `🤖 *AI WhatsApp Assistant*\n\n` +
+        `I can help you with Google Drive operations!\n\n` +
+        `*Available commands:*\n` +
+        `• List files\n` +
+        `• Search for files\n` +
+        `• Create folders\n` +
+        `• Get file info\n` +
+        `• Share files\n` +
+        `• Delete files\n\n` +
+        `*Special commands:*\n` +
+        `/help - Show this message\n` +
+        `/clear - Clear conversation history\n\n` +
+        `Just chat naturally, and I'll help you with Google Drive!`;
+      message.reply(helpText);
+      return;
+    }
+
+    // Process message with AI
+    try {
+      console.log(`🤖 Processing with AI...`);
+      const aiResponse = await aiHandler.processMessage(
+        message.from,
+        message.body
+      );
+
+      if (aiResponse.success && aiResponse.message) {
+        await message.reply(aiResponse.message);
+        console.log(`✅ AI Response sent`);
+      } else {
+        await message.reply("Sorry, I couldn't process that request.");
+      }
+    } catch (error) {
+      console.error("Error processing AI message:", error);
+      await message.reply("An error occurred while processing your message.");
     }
   }
 });
