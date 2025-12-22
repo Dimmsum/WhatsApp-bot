@@ -57,9 +57,9 @@ const availableFunctions = {
 
   create_linear_issue: async (args = {}) =>
     linear.createIssue(
-      args.teamId,
       args.title,
       args.description ?? null,
+      args.teamId,
       args.projectId ?? null,
       args.stateId ?? null,
       args.assigneeId ?? null,
@@ -250,15 +250,15 @@ const functionDeclarations = [
         },
         description: {
           type: "string",
-          description: "Issue description (optional)",
+          description: "Optional: Issue description",
         },
         teamId: {
           type: "string",
-          description: "Team name, key, or ID to create the issue in",
+          description: "Optional: Team name, key, or ID to create the issue in",
         },
         projectId: {
           type: "string",
-          description: "Optional project ID",
+          description: "Optional: Project identifier: can be project UUID OR key (e.g. INT) OR project name",
         },
         stateId: {
           type: "string",
@@ -266,7 +266,8 @@ const functionDeclarations = [
         },
         assigneeId: {
           type: "string",
-          description: "Optional assignee ID",
+          description: "Optional assignee identifier: can be a Linear user UUID OR an email OR a name/displayName (e.g. 'enoch@intellibus.com' or 'Enoch')",
+
         },
         labelIds: {
           type: "array",
@@ -323,8 +324,12 @@ async function processMessage(userId, userMessage) {
       },
     });
 
+    const sanitizedHistory = conversationHistory[userId].filter(
+      (content) => Array.isArray(content?.parts) && content.parts.length > 0
+    );
+
     const chat = model.startChat({
-      history: conversationHistory[userId],
+      history: sanitizedHistory,
     });
 
     let result = await chat.sendMessage(userMessage);
@@ -355,8 +360,19 @@ async function processMessage(userId, userMessage) {
             ).join(", ")}`,
           };
         } else {
-          // ✅ FIX #1: pass args object directly (no Object.values)
-          functionResponse = await fn(functionArgs);
+          try {
+            // ✅ pass args object directly (no Object.values)
+            const result = await fn(functionArgs);
+            functionResponse =
+              result && typeof result === "object"
+                ? result
+                : { success: true, result };
+          } catch (error) {
+            functionResponse = {
+              success: false,
+              message: error.message || "Function execution failed",
+            };
+          }
         }
 
         // Send tool result back to Gemini
@@ -377,7 +393,9 @@ async function processMessage(userId, userMessage) {
       console.warn("⚠️ Tool loop safety triggered (max iterations reached).");
     }
 
-    conversationHistory[userId] = await chat.getHistory();
+    conversationHistory[userId] = (await chat.getHistory()).filter(
+      (content) => Array.isArray(content?.parts) && content.parts.length > 0
+    );
 
     if (conversationHistory[userId].length > 40) {
       conversationHistory[userId] = conversationHistory[userId].slice(-40);

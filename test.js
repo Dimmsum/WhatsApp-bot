@@ -3,33 +3,19 @@ require("dotenv").config();
 
 const LINEAR_API_URL = "https://api.linear.app/graphql";
 
-async function listTeams() {
+function isLikelyUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+async function linearRequest(query, variables = {}) {
   const apiKey = process.env.LINEAR_API_KEY;
-  if (!apiKey) {
-    throw new Error("LINEAR_API_KEY is not set");
-  }
+  if (!apiKey) throw new Error("LINEAR_API_KEY is not set");
 
   const response = await axios.post(
     LINEAR_API_URL,
-    {
-      query: `
-        query {
-          team(id: "cf0f736e-8d4e-425f-806c-38c05a280f9a") {
-            id
-            name
-              projects {
-                nodes {
-                  id
-                  name
-                  state
-                  url
-                }
-              }
-          }
-        }
-      `,
-      
-    },
+    { query, variables },
     {
       headers: {
         Authorization: apiKey,
@@ -38,25 +24,112 @@ async function listTeams() {
     }
   );
 
-  if (response.data.errors && response.data.errors.length) {
-    throw new Error(response.data.errors[0].message);
+  if (response.data.errors?.length) {
+    const message = response.data.errors.map((err) => err.message).join("; ");
+    throw new Error(message);
   }
 
-  return response.data.data.team.projects;
-    // return response.data.data.teams.nodes;
-
+  return response.data.data;
 }
+
+async function listUsers() {
+  const data = await linearRequest(`
+    query {
+      users {
+        nodes {
+          id
+          name
+          displayName
+          email
+        }
+      }
+    }
+  `);
+
+  return data.users.nodes;
+}
+
+async function resolveAssigneeId(assigneeIdOrEmailOrName) {
+  if (!assigneeIdOrEmailOrName) return null;
+  if (isLikelyUuid(assigneeIdOrEmailOrName)) {
+    return assigneeIdOrEmailOrName;
+  }
+
+  const needle = assigneeIdOrEmailOrName.trim().toLowerCase();
+  const data = await linearRequest(`
+    query {
+      users {
+        nodes {
+          id
+          name
+          displayName
+          email
+        }
+      }
+    }
+  `);
+
+  const users = data.users.nodes;
+  const byEmail = users.find(
+    (user) => user.email && user.email.toLowerCase() === needle
+  );
+  if (byEmail) return byEmail.id;
+
+  const byDisplayName = users.find(
+    (user) => user.displayName && user.displayName.toLowerCase() === needle
+  );
+  if (byDisplayName) return byDisplayName.id;
+
+  const byName = users.find(
+    (user) => user.name && user.name.toLowerCase() === needle
+  );
+  if (byName) return byName.id;
+
+  const tokens = needle.split(/\s+/).filter(Boolean);
+  const partial = users.find((user) => {
+    const name = user.name ? user.name.toLowerCase() : "";
+    const displayName = user.displayName ? user.displayName.toLowerCase() : "";
+    const email = user.email ? user.email.toLowerCase() : "";
+    const fields = [name, displayName, email].filter(Boolean);
+
+    if (fields.some((field) => field.includes(needle))) return true;
+    if (fields.some((field) => needle.includes(field))) return true;
+
+    return tokens.some((token) =>
+      fields.some((field) => field.includes(token))
+    );
+  });
+
+  return partial ? partial.id : null;
+}
+
 
 async function main() {
   try {
-    const teams = await listTeams();
-    // console.log(`Found ${teams.length} teams:`);
-    console.log(teams);
-    // for (const team of teams) {
-    //   console.log(`- ${team.name} (${team.key}) [${team.id}]`);
-    // }
+    const query = process.argv.slice(2).join(" ").trim();
+
+    if (query) {
+      const resolvedId = await resolveAssigneeId(query);
+      if (!resolvedId) {
+        console.log("No matching user found.");
+        return;
+      }
+      console.log(`Resolved assignee ID: ${resolvedId}`);
+      return;
+    }
+
+    const users = await listUsers();
+    console.log(`Found ${users.length} users:`);
+    for (const user of users) {
+      const displayName = user.displayName ? ` (${user.displayName})` : "";
+      console.log(`- ${user.name}${displayName} <${user.email}> [${user.id}]`);
+    }
   } catch (error) {
-    console.error("Failed to list teams:", error.message);
+    const responseData = error.response?.data;
+    console.error("Failed to list users:", error.message);
+    if (responseData) {
+      console.error("Response:", JSON.stringify(responseData, null, 2));
+    }
     process.exitCode = 1;
   }
 }
