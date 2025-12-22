@@ -2,9 +2,9 @@ const { google } = require("googleapis");
 require("dotenv").config();
 
 /**
- * Initialize Google Drive API client
+ * Get OAuth2 client for Google APIs
  */
-function getGoogleDriveClient() {
+function getOAuth2Client() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -18,7 +18,21 @@ function getGoogleDriveClient() {
     });
   }
 
-  return google.drive({ version: "v3", auth: oauth2Client });
+  return oauth2Client;
+}
+
+/**
+ * Initialize Google Drive API client
+ */
+function getGoogleDriveClient() {
+  return google.drive({ version: "v3", auth: getOAuth2Client() });
+}
+
+/**
+ * Initialize Google Docs API client
+ */
+function getGoogleDocsClient() {
+  return google.docs({ version: "v1", auth: getOAuth2Client() });
 }
 
 /**
@@ -189,11 +203,248 @@ async function shareFile(fileId, email, role = "reader") {
   }
 }
 
+/**
+ * Create a new Google Doc
+ */
+async function createDoc(title) {
+  try {
+    const docs = getGoogleDocsClient();
+    const response = await docs.documents.create({
+      requestBody: {
+        title: title,
+      },
+    });
+
+    return {
+      success: true,
+      document: {
+        id: response.data.documentId,
+        title: response.data.title,
+        url: `https://docs.google.com/document/d/${response.data.documentId}/edit`,
+      },
+      message: `Document "${title}" created successfully`,
+    };
+  } catch (error) {
+    console.error("Error creating document:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      message: "Failed to create Google Doc",
+    };
+  }
+}
+
+/**
+ * Read content from a Google Doc
+ */
+async function readDoc(documentId) {
+  try {
+    const docs = getGoogleDocsClient();
+    const response = await docs.documents.get({
+      documentId: documentId,
+    });
+
+    // Extract text from the document
+    let text = "";
+    const content = response.data.body.content;
+
+    for (const element of content) {
+      if (element.paragraph) {
+        const paragraph = element.paragraph;
+        for (const textElement of paragraph.elements || []) {
+          if (textElement.textRun && textElement.textRun.content) {
+            text += textElement.textRun.content;
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      document: {
+        id: response.data.documentId,
+        title: response.data.title,
+        content: text.trim(),
+        url: `https://docs.google.com/document/d/${response.data.documentId}/edit`,
+      },
+      message: `Document read successfully`,
+    };
+  } catch (error) {
+    console.error("Error reading document:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      message: "Failed to read Google Doc",
+    };
+  }
+}
+
+/**
+ * Write/append text to a Google Doc
+ */
+async function writeToDoc(documentId, text, location = "end") {
+  try {
+    const docs = getGoogleDocsClient();
+
+    // First, get the document to find the end index
+    const doc = await docs.documents.get({
+      documentId: documentId,
+    });
+
+    const endIndex =
+      doc.data.body.content[doc.data.body.content.length - 1].endIndex;
+
+    // Determine insertion index based on location
+    let insertIndex;
+    if (location === "start") {
+      insertIndex = 1; // Start of document (after title)
+    } else {
+      insertIndex = endIndex - 1; // End of document
+    }
+
+    // Insert text
+    const requests = [
+      {
+        insertText: {
+          location: {
+            index: insertIndex,
+          },
+          text: text + "\n",
+        },
+      },
+    ];
+
+    await docs.documents.batchUpdate({
+      documentId: documentId,
+      requestBody: {
+        requests: requests,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Text added to document successfully`,
+      url: `https://docs.google.com/document/d/${documentId}/edit`,
+    };
+  } catch (error) {
+    console.error("Error writing to document:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      message: "Failed to write to Google Doc",
+    };
+  }
+}
+
+/**
+ * Replace text in a Google Doc
+ */
+async function replaceTextInDoc(documentId, searchText, replacementText) {
+  try {
+    const docs = getGoogleDocsClient();
+
+    const requests = [
+      {
+        replaceAllText: {
+          containsText: {
+            text: searchText,
+            matchCase: false,
+          },
+          replaceText: replacementText,
+        },
+      },
+    ];
+
+    await docs.documents.batchUpdate({
+      documentId: documentId,
+      requestBody: {
+        requests: requests,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Text replaced successfully in document`,
+      url: `https://docs.google.com/document/d/${documentId}/edit`,
+    };
+  } catch (error) {
+    console.error("Error replacing text in document:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      message: "Failed to replace text in Google Doc",
+    };
+  }
+}
+
+/**
+ * Search for Google Docs by name
+ */
+async function searchDocs(query) {
+  try {
+    const drive = getGoogleDriveClient();
+    const response = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.document' and name contains '${query}' and trashed=false`,
+      pageSize: 10,
+      fields: "files(id, name, createdTime, modifiedTime, webViewLink)",
+    });
+
+    return {
+      success: true,
+      documents: response.data.files,
+      message: `Found ${response.data.files.length} documents matching "${query}"`,
+    };
+  } catch (error) {
+    console.error("Error searching documents:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      message: "Failed to search Google Docs",
+    };
+  }
+}
+
+/**
+ * List recent Google Docs
+ */
+async function listDocs(maxResults = 10) {
+  try {
+    const drive = getGoogleDriveClient();
+    const response = await drive.files.list({
+      q: "mimeType='application/vnd.google-apps.document' and trashed=false",
+      pageSize: maxResults,
+      orderBy: "modifiedTime desc",
+      fields: "files(id, name, createdTime, modifiedTime, webViewLink)",
+    });
+
+    return {
+      success: true,
+      documents: response.data.files,
+      message: `Found ${response.data.files.length} documents`,
+    };
+  } catch (error) {
+    console.error("Error listing documents:", error.message);
+    return {
+      success: false,
+      error: error.message,
+      message: "Failed to list Google Docs",
+    };
+  }
+}
+
 module.exports = {
+  // Drive functions
   listFiles,
   searchFiles,
   createFolder,
   deleteFile,
   getFileMetadata,
   shareFile,
+  // Docs functions
+  createDoc,
+  readDoc,
+  writeToDoc,
+  replaceTextInDoc,
+  searchDocs,
+  listDocs,
 };

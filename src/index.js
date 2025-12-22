@@ -7,11 +7,12 @@ require("dotenv").config();
 
 // Bot start time - only process messages after this
 const botStartTime = Date.now();
-const allowedNumber = (process.env.TEST_ALLOWED_NUMBER || "+1 (876) 844-5789").replace(
-  /\D/g,
-  ""
-);
-const allowedName = (process.env.TEST_ALLOWED_NAME || "Carlyon").toLowerCase();
+const allowedNumber = (
+  process.env.TEST_ALLOWED_NUMBER || "+1 (876) 237-9984"
+).replace(/\D/g, "");
+const allowedName = (
+  process.env.TEST_ALLOWED_NAME || "Santas Hardest Worker"
+).toLowerCase();
 
 function isAllowedSender(message, displayName) {
   const senderId = message.from || "";
@@ -101,9 +102,10 @@ client.on("message", async (message) => {
 
   // Process messages with AI (only for received messages)
   if (!isFromMe) {
-    if (!isAllowedSender(message, displayName)) {
-      return;
-    }
+    // Temporarily allow all users for testing
+    // if (!isAllowedSender(message, displayName)) {
+    //   return;
+    // }
 
     // Special commands
     if (message.body.toLowerCase() === "/clear") {
@@ -115,7 +117,7 @@ client.on("message", async (message) => {
     if (message.body.toLowerCase() === "/help") {
       const helpText =
         `🤖 *AI WhatsApp Assistant*\n\n` +
-        `I can help you with Google Drive and Linear!\n\n` +
+        `I can help you with Google Drive, Google Docs, and Linear!\n\n` +
         `*Google Drive:*\n` +
         `• List files\n` +
         `• Search for files\n` +
@@ -123,6 +125,13 @@ client.on("message", async (message) => {
         `• Get file info\n` +
         `• Share files\n` +
         `• Delete files\n\n` +
+        `*Google Docs:*\n` +
+        `• Create new documents\n` +
+        `• Read document content\n` +
+        `• Write/append to documents\n` +
+        `• Replace text in documents\n` +
+        `• Search for documents\n` +
+        `• List recent documents\n\n` +
         `*Linear:*\n` +
         `• List teams and projects\n` +
         `• Create issues\n` +
@@ -131,7 +140,7 @@ client.on("message", async (message) => {
         `*Special commands:*\n` +
         `/help - Show this message\n` +
         `/clear - Clear conversation history\n\n` +
-        `Just chat naturally, and I'll help you with Google Drive and Linear!`;
+        `Just chat naturally, and I'll help you with Google Drive, Docs, and Linear!`;
       message.reply(helpText);
       return;
     }

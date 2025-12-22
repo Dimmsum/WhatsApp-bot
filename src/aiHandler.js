@@ -24,7 +24,8 @@ const availableFunctions = {
   create_google_drive_folder: async (args = {}) =>
     googleDrive.createFolder(args.folderName, args.parentFolderId),
 
-  get_file_metadata: async (args = {}) => googleDrive.getFileMetadata(args.fileId),
+  get_file_metadata: async (args = {}) =>
+    googleDrive.getFileMetadata(args.fileId),
 
   share_google_drive_file: async (args = {}) =>
     googleDrive.shareFile(args.fileId, args.email, args.role),
@@ -40,6 +41,25 @@ const availableFunctions = {
     }
     return googleDrive.deleteFile(args.fileId);
   },
+
+  // Google Docs
+  create_google_doc: async (args = {}) => googleDrive.createDoc(args.title),
+
+  read_google_doc: async (args = {}) => googleDrive.readDoc(args.documentId),
+
+  write_to_google_doc: async (args = {}) =>
+    googleDrive.writeToDoc(args.documentId, args.text, args.location ?? "end"),
+
+  replace_text_in_google_doc: async (args = {}) =>
+    googleDrive.replaceTextInDoc(
+      args.documentId,
+      args.searchText,
+      args.replacementText
+    ),
+
+  search_google_docs: async (args = {}) => googleDrive.searchDocs(args.query),
+
+  list_google_docs: async (args = {}) => googleDrive.listDocs(args.maxResults),
 
   // Linear
   list_linear_teams: async (_args = {}) => linear.listTeams(),
@@ -171,6 +191,109 @@ const functionDeclarations = [
     },
   },
   {
+    name: "create_google_doc",
+    description: "Create a new Google Doc with a specified title.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Title for the new Google Doc",
+        },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "read_google_doc",
+    description:
+      "Read the content from a Google Doc. Returns the full text content of the document.",
+    parameters: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "ID of the Google Doc to read",
+        },
+      },
+      required: ["documentId"],
+    },
+  },
+  {
+    name: "write_to_google_doc",
+    description:
+      "Write or append text to a Google Doc. Can add text at the start or end of the document.",
+    parameters: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "ID of the Google Doc to write to",
+        },
+        text: {
+          type: "string",
+          description: "Text content to add to the document",
+        },
+        location: {
+          type: "string",
+          enum: ["start", "end"],
+          description: "Where to add the text (start or end of document)",
+        },
+      },
+      required: ["documentId", "text"],
+    },
+  },
+  {
+    name: "replace_text_in_google_doc",
+    description:
+      "Find and replace text in a Google Doc. Replaces all occurrences of the search text.",
+    parameters: {
+      type: "object",
+      properties: {
+        documentId: {
+          type: "string",
+          description: "ID of the Google Doc",
+        },
+        searchText: {
+          type: "string",
+          description: "Text to search for",
+        },
+        replacementText: {
+          type: "string",
+          description: "Text to replace with",
+        },
+      },
+      required: ["documentId", "searchText", "replacementText"],
+    },
+  },
+  {
+    name: "search_google_docs",
+    description: "Search for Google Docs by name.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query to find documents",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "list_google_docs",
+    description: "List recent Google Docs in the user's Drive.",
+    parameters: {
+      type: "object",
+      properties: {
+        maxResults: {
+          type: "number",
+          description: "Maximum number of documents to return (default: 10)",
+        },
+      },
+    },
+  },
+  {
     name: "list_linear_teams",
     description: "List teams in Linear.",
     parameters: {
@@ -178,20 +301,21 @@ const functionDeclarations = [
       properties: {},
     },
   },
-{
-  name: "list_linear_projects",
-  description:
-    "List projects in Linear. You can filter by team by passing teamId as a team key (e.g. INT), name, or UUID.",
-  parameters: {
-    type: "object",
-    properties: {
-      teamId: {
-        type: "string",
-        description: "Optional team key/name/UUID to filter projects (e.g. INT)",
+  {
+    name: "list_linear_projects",
+    description:
+      "List projects in Linear. You can filter by team by passing teamId as a team key (e.g. INT), name, or UUID.",
+    parameters: {
+      type: "object",
+      properties: {
+        teamId: {
+          type: "string",
+          description:
+            "Optional team key/name/UUID to filter projects (e.g. INT)",
+        },
       },
     },
   },
-},
   {
     name: "list_linear_issue_states",
     description: "List issue states for a Linear team.",
@@ -334,7 +458,10 @@ async function processMessage(userId, userMessage) {
     let toolIterations = 0;
     const MAX_TOOL_ITERATIONS = 5;
 
-    while (response.functionCalls && response.functionCalls() && toolIterations++ < MAX_TOOL_ITERATIONS) {
+    while (
+      response.functionCalls?.() &&
+      toolIterations++ < MAX_TOOL_ITERATIONS
+    ) {
       const functionCalls = response.functionCalls();
 
       for (const call of functionCalls) {
@@ -383,12 +510,19 @@ async function processMessage(userId, userMessage) {
       conversationHistory[userId] = conversationHistory[userId].slice(-40);
     }
 
+    const responseText = response.text();
+    console.log(
+      `✅ AI Response generated: ${responseText.substring(0, 100)}...`
+    );
+
     return {
       success: true,
-      message: response.text(),
+      message: responseText,
     };
   } catch (error) {
-    console.error("Error processing message with AI:", error.message);
+    console.error("Error processing message with AI:");
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
     return {
       success: false,
       message: `Sorry, I encountered an error: ${error.message}`,

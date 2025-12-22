@@ -1,4 +1,4 @@
-# WhatsApp Bot with AI & Google Drive Integration
+# WhatsApp Bot with AI, Google Drive & Docs Integration
 
 An intelligent WhatsApp bot that connects to your WhatsApp account and uses Google's Gemini AI to process messages and perform Google Drive operations through natural language commands.
 
@@ -7,7 +7,8 @@ An intelligent WhatsApp bot that connects to your WhatsApp account and uses Goog
 - **WhatsApp Integration**: Connect via QR code using whatsapp-web.js
 - **AI-Powered Responses**: Uses Google Gemini for intelligent conversation
 - **Google Drive Functions**: List, search, create, share, and delete files
-- **Function Calling**: AI automatically calls appropriate Drive functions
+- **Google Docs Integration**: Create, read, write, and modify Google Docs
+- **Function Calling**: AI automatically calls appropriate Drive/Docs functions
 - **Message Filtering**: Only processes recent personal chats (ignores old messages and groups)
 - **Session Persistence**: Stores WhatsApp session to avoid repeated QR scans
 - **Conversation Context**: Maintains chat history per user
@@ -57,25 +58,29 @@ AI_MODEL=gemini-2.0-flash-exp
 AI_SYSTEM_PROMPT=You are a helpful WhatsApp assistant that can interact with Google Drive.
 ```
 
-### 3. Get Google Drive Credentials (Optional)
+### 3. Get Google Drive & Docs Credentials (Optional)
 
-If you want Google Drive integration:
+If you want Google Drive and Docs integration:
 
 **A. Create Google Cloud Project:**
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project
-3. Enable Google Drive API
+3. Enable **Google Drive API** and **Google Docs API**
 
 **B. Create OAuth Credentials:**
+
 1. Go to APIs & Services → Credentials
 2. Create OAuth 2.0 Client ID (Web application)
 3. Add redirect URI: `http://localhost:3000/oauth2callback`
 4. Copy Client ID and Client Secret to `.env`
 
 **C. Get Refresh Token:**
+
 ```bash
 node getToken.js
 ```
+
 - Browser will open for authorization
 - Copy the refresh token displayed in terminal
 - Add it to your `.env` file
@@ -89,12 +94,14 @@ npm start
 ```
 
 **First Run:**
+
 1. QR code appears in terminal
 2. Open WhatsApp on phone → Settings → Linked Devices → Link a Device
 3. Scan the QR code
 4. Bot connects and starts listening
 
 **Subsequent Runs:**
+
 - No QR code needed (session persisted in `.wwebjs_cache/`)
 
 ## 📁 Project Structure
@@ -128,11 +135,13 @@ Uses `nodemon` to restart on file changes.
 ### Key Configuration Options
 
 **Message Filtering** (`src/index.js`):
+
 - `botStartTime`: Ignores messages sent before bot started
 - Group messages are filtered out automatically
 - Status broadcasts are ignored
 
 **AI Model** (`.env`):
+
 - `gemini-2.0-flash-exp`: Fastest, experimental features
 - `gemini-1.5-flash`: Stable, fast responses
 - `gemini-1.5-pro`: Most capable, slower
@@ -142,11 +151,13 @@ Uses `nodemon` to restart on file changes.
 Send a message to yourself or any WhatsApp contact:
 
 **Basic Commands:**
+
 - `Hello` - Simple greeting
 - `/help` - Show available commands
 - `/clear` - Clear conversation history
 
 **Google Drive Commands:**
+
 - "List my files"
 - "Search for tax documents"
 - "Create a folder called Projects"
@@ -209,6 +220,7 @@ const availableFunctions = {
 ## 🐛 Troubleshooting
 
 ### QR Code Not Appearing
+
 ```bash
 # Clear session and restart
 rm -rf .wwebjs_cache
@@ -216,21 +228,25 @@ npm start
 ```
 
 ### "Quota Exceeded" Error
+
 - You're using an OpenAI key instead of Gemini
 - Update `.env` with `GEMINI_API_KEY`
 
 ### "Model Overloaded" Error
+
 - Gemini's free tier is busy
 - Wait a few seconds and try again
 - Or switch to `gemini-1.5-flash` in `.env`
 
 ### Bot Not Responding
+
 - Check console for errors
 - Verify `.env` has correct `GEMINI_API_KEY`
 - Ensure messages are from personal chats (not groups)
 - Check bot is still connected to WhatsApp
 
 ### Google Drive Functions Failing
+
 - Verify refresh token in `.env`
 - Refresh token might be expired - run `node getToken.js` again
 - Check Google Cloud Console for API limits
@@ -248,8 +264,10 @@ npm start
 - [Gemini API Docs](https://ai.google.dev/docs)
 - [whatsapp-web.js Guide](https://wwebjs.dev/)
 - [Google Drive API Reference](https://developers.google.com/drive/api/v3/reference)
+- [Google Docs API Reference](https://developers.google.com/docs/api/reference/rest)
 - [Usage Examples](USAGE_EXAMPLES.md)
 - [Google Drive Setup Guide](GOOGLE_DRIVE_SETUP.md)
+- [Google Docs Integration Guide](GOOGLE_DOCS_GUIDE.md)
 
 ## 🤝 Contributing
 
@@ -272,6 +290,7 @@ npm start
 ### Before Pushing to GitHub
 
 **Remove secrets from commits:**
+
 ```bash
 # Check what will be committed
 git status
@@ -293,10 +312,12 @@ git reset HEAD~1
 ### Hosting Options
 
 **Local Development:**
+
 - Run on your machine: `npm start`
 - Keep terminal open
 
 **Cloud Hosting:**
+
 - **Heroku**: Use Heroku Buildpacks for Puppeteer
 - **Railway**: Simple deployment with environment variables
 - **DigitalOcean**: Deploy on a droplet
