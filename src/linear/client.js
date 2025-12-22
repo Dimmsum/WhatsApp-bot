@@ -26,6 +26,11 @@ async function linearRequest(query, variables = {}) {
   if (response.data.errors && response.data.errors.length) {
     throw new Error(response.data.errors[0].message);
   }
+  //   if (err.response) {
+  //   console.error("Linear HTTP error:", err.response.status);
+  //   console.error("Linear response body:", JSON.stringify(err.response.data, null, 2));
+  //   console.error("Linear request body:", JSON.stringify(err.config?.data, null, 2));
+  // }
 
   return response.data.data;
 }

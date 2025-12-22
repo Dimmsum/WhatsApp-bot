@@ -28,12 +28,10 @@ async function resolveTeamId(teamIdOrKeyOrName) {
 
   const needle = teamIdOrKeyOrName.trim().toLowerCase();
   const teams = await fetchTeams();
-  console.log("Teams fetched:", teams, "Input", teamIdOrKeyOrName, "needle", needle);
 
   const byKey = teams.find(
     (team) => team.key && team.key.toLowerCase() === needle
   );
-  console.log("By key:", byKey);
   if (byKey) return byKey.id;
 
   
