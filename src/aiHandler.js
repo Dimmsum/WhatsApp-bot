@@ -1,3 +1,5 @@
+// aiHandler.js (UPDATED)
+
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const googleDrive = require("./googleDrive");
 const linear = require("./linear");
@@ -5,24 +7,70 @@ require("dotenv").config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Define available functions for ChatGPT to call
+/**
+ * ✅ FIX #1: Every tool takes a single "args" object (no Object.values / positional args).
+ * ✅ Guard unknown tools.
+ * ✅ Add max tool-iteration safety to prevent infinite loops.
+ * ✅ Enforce delete confirmation in code (optional but recommended).
+ */
 const availableFunctions = {
-  list_google_drive_files: googleDrive.listFiles,
-  search_google_drive_files: googleDrive.searchFiles,
-  create_google_drive_folder: googleDrive.createFolder,
-  delete_google_drive_file: googleDrive.deleteFile,
-  get_file_metadata: googleDrive.getFileMetadata,
-  share_google_drive_file: googleDrive.shareFile,
-  list_linear_teams: linear.listTeams,
-  list_linear_projects: linear.listProjects,
-  list_linear_issue_states: linear.listIssueStates,
-  search_linear_issues: linear.searchIssues,
-  get_linear_issue: linear.getIssue,
-  create_linear_issue: linear.createIssue,
-  update_linear_issue_status: linear.updateIssueStatus,
+  // Google Drive
+  list_google_drive_files: async (args = {}) =>
+    googleDrive.listFiles(args.maxResults),
+
+  search_google_drive_files: async (args = {}) =>
+    googleDrive.searchFiles(args.query),
+
+  create_google_drive_folder: async (args = {}) =>
+    googleDrive.createFolder(args.folderName, args.parentFolderId),
+
+  get_file_metadata: async (args = {}) => googleDrive.getFileMetadata(args.fileId),
+
+  share_google_drive_file: async (args = {}) =>
+    googleDrive.shareFile(args.fileId, args.email, args.role),
+
+  // ✅ safety: confirm deletes in code, not only prompt
+  delete_google_drive_file: async (args = {}) => {
+    if (!args?.confirm) {
+      return {
+        success: false,
+        message:
+          "Delete is a destructive action. Reply again with: `delete <fileId> confirm` (or provide confirm: true) to proceed.",
+      };
+    }
+    return googleDrive.deleteFile(args.fileId);
+  },
+
+  // Linear
+  list_linear_teams: async (_args = {}) => linear.listTeams(),
+
+  list_linear_projects: async (args = {}) =>
+    linear.listProjects(args.teamId ?? null),
+
+  list_linear_issue_states: async (args = {}) =>
+    linear.listIssueStates(args.teamId),
+
+  search_linear_issues: async (args = {}) =>
+    linear.searchIssues(args.query, args.first ?? 10),
+
+  get_linear_issue: async (args = {}) => linear.getIssue(args.issueIdOrKey),
+
+  create_linear_issue: async (args = {}) =>
+    linear.createIssue(
+      args.teamId,
+      args.title,
+      args.description ?? null,
+      args.projectId ?? null,
+      args.stateId ?? null,
+      args.assigneeId ?? null,
+      args.labelIds ?? null
+    ),
+
+  update_linear_issue_status: async (args = {}) =>
+    linear.updateIssueStatus(args.issueIdOrKey, args.stateId),
 };
 
-// Define the function declarations for Gemini
+// Keep your existing functionDeclarations as-is (you can add confirm to delete later if you want)
 const functionDeclarations = [
   {
     name: "list_google_drive_files",
@@ -130,20 +178,20 @@ const functionDeclarations = [
       properties: {},
     },
   },
-  {
-    name: "list_linear_projects",
-    description:
-      "List projects in Linear. Optionally filter by team name, key, or ID.",
-    parameters: {
-      type: "object",
-      properties: {
-        teamId: {
-          type: "string",
-          description: "Optional team name, key, or ID to filter projects",
-        },
+{
+  name: "list_linear_projects",
+  description:
+    "List projects in Linear. You can filter by team by passing teamId as a team key (e.g. INT), name, or UUID.",
+  parameters: {
+    type: "object",
+    properties: {
+      teamId: {
+        type: "string",
+        description: "Optional team key/name/UUID to filter projects (e.g. INT)",
       },
     },
   },
+},
   {
     name: "list_linear_issue_states",
     description: "List issue states for a Linear team.",
@@ -257,10 +305,7 @@ const conversationHistory = {};
  */
 async function processMessage(userId, userMessage) {
   try {
-    // Initialize conversation history for new users
-    if (!conversationHistory[userId]) {
-      conversationHistory[userId] = [];
-    }
+    if (!conversationHistory[userId]) conversationHistory[userId] = [];
 
     const systemPrompt =
       process.env.AI_SYSTEM_PROMPT ||
@@ -269,7 +314,6 @@ async function processMessage(userId, userMessage) {
         "When users ask about issues, projects, or status updates in Linear, use the Linear functions. " +
         "Be conversational and helpful. Always confirm before deleting files.";
 
-    // Initialize Gemini model with function calling
     const model = genAI.getGenerativeModel({
       model: process.env.AI_MODEL || "gemini-1.5-flash",
       tools: [{ functionDeclarations }],
@@ -279,31 +323,43 @@ async function processMessage(userId, userMessage) {
       },
     });
 
-    // Build chat history for Gemini
     const chat = model.startChat({
       history: conversationHistory[userId],
     });
 
-    // Send message and get response
     let result = await chat.sendMessage(userMessage);
     let response = result.response;
 
-    // Handle function calls
-    while (response.functionCalls()) {
+    // ✅ safety limit: prevent infinite tool-call loops
+    let toolIterations = 0;
+    const MAX_TOOL_ITERATIONS = 5;
+
+    while (response.functionCalls && response.functionCalls() && toolIterations++ < MAX_TOOL_ITERATIONS) {
       const functionCalls = response.functionCalls();
 
       for (const call of functionCalls) {
         const functionName = call.name;
-        const functionArgs = call.args;
+        const functionArgs = call.args || {};
 
         console.log(`🤖 AI calling function: ${functionName}`, functionArgs);
 
-        // Execute the function
-        const functionResponse = await availableFunctions[functionName](
-          ...Object.values(functionArgs)
-        );
+        let functionResponse;
 
-        // Send function response back to Gemini
+        // ✅ guard: unknown function
+        const fn = availableFunctions[functionName];
+        if (!fn) {
+          functionResponse = {
+            success: false,
+            message: `Unknown function: ${functionName}. Available: ${Object.keys(
+              availableFunctions
+            ).join(", ")}`,
+          };
+        } else {
+          // ✅ FIX #1: pass args object directly (no Object.values)
+          functionResponse = await fn(functionArgs);
+        }
+
+        // Send tool result back to Gemini
         result = await chat.sendMessage([
           {
             functionResponse: {
@@ -317,10 +373,12 @@ async function processMessage(userId, userMessage) {
       }
     }
 
-    // Update conversation history
+    if (toolIterations >= MAX_TOOL_ITERATIONS) {
+      console.warn("⚠️ Tool loop safety triggered (max iterations reached).");
+    }
+
     conversationHistory[userId] = await chat.getHistory();
 
-    // Keep conversation history limited (last 20 exchanges)
     if (conversationHistory[userId].length > 40) {
       conversationHistory[userId] = conversationHistory[userId].slice(-40);
     }

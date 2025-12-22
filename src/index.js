@@ -7,6 +7,18 @@ require("dotenv").config();
 
 // Bot start time - only process messages after this
 const botStartTime = Date.now();
+const allowedNumber = (process.env.TEST_ALLOWED_NUMBER || "+1 (876) 844-5789").replace(
+  /\D/g,
+  ""
+);
+const allowedName = (process.env.TEST_ALLOWED_NAME || "Carlyon").toLowerCase();
+
+function isAllowedSender(message, displayName) {
+  const senderId = message.from || "";
+  const senderNumber = senderId.split("@")[0].replace(/\D/g, "");
+  const normalizedName = (displayName || "").toLowerCase();
+  return senderNumber === allowedNumber || normalizedName === allowedName;
+}
 
 // Initialize the WhatsApp client
 const client = new Client({
@@ -89,6 +101,10 @@ client.on("message", async (message) => {
 
   // Process messages with AI (only for received messages)
   if (!isFromMe) {
+    if (!isAllowedSender(message, displayName)) {
+      return;
+    }
+
     // Special commands
     if (message.body.toLowerCase() === "/clear") {
       aiHandler.clearHistory(message.from);
